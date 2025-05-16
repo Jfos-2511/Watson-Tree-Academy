@@ -30,28 +30,43 @@ const defaultPosts: BlogPost[] = [
   }
 ];
 
-export async function loadBlogPosts(): Promise<BlogPost[]> {
-  try {
-    // First try to load posts from Decap CMS content directory
-    const response = await fetch('/content/blog/index.json');
-    if (!response.ok) {
-      throw new Error('Failed to fetch posts');
-    }
-    const posts = await response.json();
-    return posts.map((post: any) => ({
-      id: post.id,
-      title: post.title,
-      excerpt: post.excerpt,
-      content: post.body,
-      author: post.author,
-      date: post.date,
-      image: post.image,
-      slug: post.slug
-    }));
-  } catch (error) {
-    console.warn('Failed to load posts from CMS, using default posts:', error);
-    return defaultPosts;
-  }
+import matter from 'gray-matter';
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  author?: string;
+  date: string;
+  image?: string;
+  slug: string;
 }
+
+export async function loadBlogPosts(): Promise<BlogPost[]> {
+  const files = import.meta.glob('/src/content/blog/*.md', { as: 'raw' });
+
+  const posts: BlogPost[] = [];
+
+  for (const path in files) {
+    const raw = await files[path]();
+    const { data, content } = matter(raw);
+
+    posts.push({
+      id: data.id || data.slug || path,
+      title: data.title,
+      excerpt: data.excerpt || content.slice(0, 150),
+      content: content,
+      author: data.author || 'Unknown',
+      date: data.date,
+      image: data.image || '',
+      slug: data.slug || path.split('/').pop()?.replace('.md', '') || ''
+    });
+  }
+
+
+  return posts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
 
 export { defaultPosts };
